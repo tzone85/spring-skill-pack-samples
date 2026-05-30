@@ -123,3 +123,28 @@ class OrdersControllerTest {
 - `oauth2-client-flow` (when service IS the client)
 - `method-level-security` (deeper @PreAuthorize/@PostAuthorize patterns)
 - `owasp-top10-spring-checklist`
+
+## Greenfield path
+
+New service, choose JWT resource server from day 1:
+
+1. Add `spring-boot-starter-oauth2-resource-server` to `build.gradle` / `pom.xml`.
+2. Pick the IDP early (Keycloak, Auth0, Cognito, internal). Put the issuer URI in `application.yml` per profile; never hard-code.
+3. Define scopes BEFORE you define endpoints. Each endpoint maps to one scope. Document scope catalogue in an ADR.
+4. Add the `SecurityConfig` bean with explicit allow-list for `/actuator/health` and `/actuator/info` only. Everything else `authenticated()`.
+5. CI gate: ArchUnit test that no controller method is annotated without either `@PreAuthorize` or being on the public allow-list.
+
+The rule: an endpoint without an explicit authorization decision is a build failure, not a security review item.
+
+## Brownfield path
+
+Existing service running on Spring Security 5.x with `WebSecurityConfigurerAdapter`:
+
+1. Pin the current behaviour: snapshot every endpoint's authorization rules + integration test coverage. Don't trust the source — verify via MockMvc.
+2. Migrate the bean structure first (`SecurityFilterChain` replaces `configure(HttpSecurity)`). Keep behaviour identical. Run the snapshot tests. They pass.
+3. Migrate `antMatchers` to `requestMatchers`. Same drill.
+4. Replace any custom `JwtAuthenticationProvider` with the resource-server DSL. This is the riskiest step — diff the granted authorities before/after.
+5. Delete the deprecated adapter only after the snapshot suite is green for two weeks AND a chaos run flipped through every role permutation.
+6. Write the ADR describing what changed and why.
+
+What NOT to do on brownfield: rewrite security in a single sprint; turn off endpoint auth "while you refactor"; trust that integration tests cover all the routes (they don't — verify with the runtime endpoint listing).

@@ -85,3 +85,27 @@ Hook: Flyway runs once per container. Don't pollute migration scripts with test 
 - `flyway-migrations-zero-downtime`
 - `jpa-n-plus-one-detector`
 - `testcontainers-multi-service` (Postgres + Kafka + Redis)
+
+## Greenfield path
+
+Day 1 of a new Spring Boot service:
+
+1. Add Testcontainers + Postgres driver dependencies.
+2. Create `PostgresIntegrationTest` base class with `withReuse(true)` and `@DynamicPropertySource` (see snippet above).
+3. Add the team-shared `~/.testcontainers.properties` reuse note to the project README. Every dev gets it on first checkout.
+4. Wire Flyway from V1. Never start with `spring.jpa.hibernate.ddl-auto=update`. Schema is owned by migrations from line 1.
+5. Bake a `make test` or Gradle `verify` task that runs the integration suite locally with the same JVM args as CI.
+
+The rule: H2 never enters the project. Not in tests, not in dev, not "temporarily".
+
+## Brownfield path
+
+On a service currently testing with H2:
+
+1. Pick one DataJpaTest class. Migrate it: extend the new `PostgresIntegrationTest` base, drop H2 config from that test, run it. Pass.
+2. Find the first real bug Postgres catches that H2 missed (it will happen — JSON, sequences, `ON CONFLICT`, lateral joins are common). Write it up. Show the team.
+3. Migrate the remaining tests in priority order: integration → repository → service. Skip `@WebMvcTest` (no DB) and pure unit tests.
+4. Delete the H2 dependency from `build.gradle` / `pom.xml` only after all DataJpaTest classes are migrated AND CI is green for two weeks.
+5. Document the migration in an ADR — what broke, how long, what surprised you. (Use `adr-template-and-conventions`.)
+
+What NOT to do on brownfield: bulk-migrate every test in one PR; leave H2 as a "fallback" for "fast local runs" (the runs become 5min on first test because the container starts; reuse fixes that, not H2); skip the ADR.

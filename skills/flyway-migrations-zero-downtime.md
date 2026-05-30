@@ -94,3 +94,27 @@ When invoked on a proposed migration: classify the change against the table; if 
 - `jpa-entity-design`
 - `testcontainers-postgres-spring-boot` (test migrations in CI)
 - `outbox-pattern` (zero-downtime event delivery)
+
+## Greenfield path
+
+Day 1 of a new service with Flyway:
+
+1. Add Flyway dependency + `db/migration/V202605311200__initial_schema.sql`.
+2. Enable Flyway in every profile including `test` (Testcontainers runs the migrations).
+3. Wire the CI safety check (`scripts/lint-migration.sh`) from PR #1, even though the lint flags nothing yet.
+4. Set the timestamped naming convention (`V{yyyyMMddHHmm}__{ticket}_{snake_case}.sql`) in `CONTRIBUTING.md`. Bake the script that generates a stub migration with the right name.
+5. Default schema choices to the safe side: TEXT not VARCHAR(n), TIMESTAMPTZ not TIMESTAMP, JSONB not JSON.
+
+The rule: every migration goes through the safety lint AND is tested with Testcontainers from day one. There is no exception.
+
+## Brownfield path
+
+Existing service with a long Flyway history and at least one production-breaking migration in the past:
+
+1. Audit `flyway_schema_history` against the migrations folder. Reconcile divergence (someone manually ran SQL is the usual culprit).
+2. Add the safety lint as a WARNING-only check for one sprint, gather data on how often it would have failed PRs. Show the team. Flip to failing.
+3. For the next 3 migrations: pair-review them against the safe/unsafe matrix in this skill. Practice phrasing changes as multi-release plans even when single-release would work.
+4. Tag the last "wild west" commit. Anything before is grandfathered; anything after follows the rules.
+5. Train one rotating "migration reviewer" per sprint. Knowledge spreads.
+
+What NOT to do on brownfield: rewrite old migrations; manually patch `flyway_schema_history`; bypass the lint for "trivial" changes; introduce the rules as a one-off lecture without process backing.
